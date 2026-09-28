@@ -1,0 +1,36 @@
+{
+  "FlowLabelName": {
+    "label": "Flow Label",
+    "description": "The name that will be displayed for this flow in the Flow Builder",
+    "defaultValue": "Sync Data from Sample to Salesforce CMDB",
+    "variableType": { "type": "StringType" },
+    "required": true
+  },
+  "FlowApiName": {
+    "label": "Flow Developer Name",
+    "description": "The unique API name for this flow",
+    "defaultValue": "SampleDiscovery",
+    "variableType": { "type": "StringType" },
+    "required": true
+  },
+  "FlowConnection_Sample": {
+    "label": "Sample Connection Reference",
+    "description": "The External Service Registration name for the Sample connection. Bring your own — no credentials are shipped with this package.",
+    "variableType": { "type": "StringType" },
+    "required": true
+  },
+  "Frequency": {
+    "label": "Polling Frequency",
+    "description": "The polling frequency in minutes",
+    "defaultValue": "5",
+    "variableType": { "type": "StringType" },
+    "required": false
+  },
+  "SyncVulnerabilities": {
+    "label": "Sync Vulnerabilities",
+    "description": "When on, the discovered vulnerabilities are synced as child CIs of each computer",
+    "defaultValue": "false",
+    "variableType": { "type": "StringType" },
+    "required": false
+  }
+}

@@ -1,0 +1,7 @@
+# Prettier ignore
+.sfdx
+.sf
+.localdevserver
+node_modules
+*.min.js
+staticresources/**/*.resource

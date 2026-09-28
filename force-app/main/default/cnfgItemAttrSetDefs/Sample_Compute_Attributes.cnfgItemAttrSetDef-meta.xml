@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Property group for the Sample attributes that extend the standard Compute type.
+     Each attribute is bound to this group via a CnfgItemAttrSetAttr (see cnfgItemAttrSetAttrs/). -->
+<CnfgItemAttrSetDef xmlns="http://soap.sforce.com/2006/04/metadata">
+    <displayName>Sample Compute Attributes</displayName>
+    <isActive>false</isActive>
+    <label>MasterLabel</label>
+</CnfgItemAttrSetDef>

@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference discovery Flow for the Sample CMDB integration.
+
+  This is the canonical SKELETON every CMDB discovery flow follows — kept deliberately
+  small so it reads as a guide. A real vendor flow adds branches (pagination, per-component
+  toggles) and often a custom Apex action to reshape/enrich its specific payload; those are
+  integration-specific and are intentionally NOT here.
+
+  THE BASICS, in order:
+
+    [1] TRIGGER          start, triggerType = EnterpriseScaleExternalSystemChange
+                         (fires per inbound external change event; payload = $Event.ObjectType.*)
+          |
+    [2] Generate_Scan_Id       platform action: opens a discovery scan
+          |
+    [3] Get_Device_Details     externalConnector: YOUR bring-your-own connection
+          |
+    [4] TRANSFORMATION   Map_Sample_Data_to_CI
+                         maps the raw event payload -> SampleComputeCI (a standard Compute
+                         CI) + its Vulnerabilities child collection (the NEW custom
+                         "Sample Vulnerability" CI type) using <transformType>Map</transformType>
+                         actions. Where a vendor would compute a value, drop a
+                         <formulaExpression> in instead.
+          |
+    [5] CMDB ACTION      Create_Sample_CI_Records
+                         createIntegrationRecordsInCmdb: bulk-persist the CI graph to CMDB
+
+  THE STORY: Sample is an endpoint vulnerability-management product. It discovers computers
+  (mapped to the standard Compute type, enriched with the SampleAgentStatus /
+  SampleComplianceState attributes) and the security vulnerabilities on each (mapped to the
+  custom Sample Vulnerability type). Every attribute and CI type this package ships is used
+  right here in this transform.
+
+  No credentials are shipped: the external call uses the FlowConnection_Sample template
+  variable (a customer-supplied External Service Registration).
+-->
+<Flow xmlns="http://soap.sforce.com/2006/04/metadata">
+    <accessType>NamespaceRestricted</accessType>
+
+    <!-- [2] Open a discovery scan for this run. -->
+    <actionCalls>
+        <description>Opens a discovery scan against the current Sample target; returns the scan/target IDs used by the record-create action.</description>
+        <name>Generate_Scan_Id</name>
+        <label>Generate Scan ID</label>
+        <locationX>176</locationX>
+        <locationY>134</locationY>
+        <actionName>generateScanIdAction</actionName>
+        <actionType>generateScanIdAction</actionType>
+        <connector>
+            <targetReference>Get_Device_Details</targetReference>
+        </connector>
+        <flowTransactionModel>CurrentTransaction</flowTransactionModel>
+        <nameSegment>generateScanIdAction</nameSegment>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </actionCalls>
+
+    <!-- [3] Fetch the device payload from the customer-registered connection. -->
+    <actionCalls>
+        <description>Calls the customer-registered Sample connection to fetch the device payload. Replace GetDeviceDetails with your External Service operation.</description>
+        <name>Get_Device_Details</name>
+        <label>Get Device Details</label>
+        <locationX>176</locationX>
+        <locationY>254</locationY>
+        <actionName>Sample.GetDeviceDetails</actionName>
+        <actionType>externalConnector</actionType>
+        <connector>
+            <targetReference>Map_Sample_Data_to_CI</targetReference>
+        </connector>
+        <flowTransactionModel>Automatic</flowTransactionModel>
+        <inputParameters>
+            <name>connection</name>
+            <value>
+                <setupReference>${Variables.FlowConnection_Sample}</setupReference>
+                <setupReferenceType>ExternalServiceRegistration</setupReferenceType>
+            </value>
+        </inputParameters>
+        <nameSegment>Sample.GetDeviceDetails</nameSegment>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </actionCalls>
+
+    <!-- [5] CMDB ACTION: bulk-persist the mapped CI graph. -->
+    <actionCalls>
+        <description>Bulk-persists the mapped Compute CI (and its nested component CIs) into Salesforce CMDB under the active scan.</description>
+        <name>Create_Sample_CI_Records</name>
+        <label>Create Sample CI Records</label>
+        <locationX>176</locationX>
+        <locationY>494</locationY>
+        <actionName>createIntegrationRecordsInCmdb</actionName>
+        <actionType>createIntegrationRecordsInCmdb</actionType>
+        <dataTypeMappings>
+            <apexClass>sfcmdbSample__SampleComputeCI</apexClass>
+            <typeName>T__recordDetails</typeName>
+        </dataTypeMappings>
+        <flowTransactionModel>CurrentTransaction</flowTransactionModel>
+        <inputParameters>
+            <name>recordDetails</name>
+            <value>
+                <elementReference>Map_Sample_Data_to_CI</elementReference>
+            </value>
+        </inputParameters>
+        <nameSegment>createIntegrationRecordsInCmdb</nameSegment>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+    </actionCalls>
+
+    <apiVersion>67.0</apiVersion>
+    <interviewLabel>${Variables.FlowLabelName} {!$Flow.CurrentDateTime}</interviewLabel>
+    <label>Sync Data from Sample to Salesforce CMDB</label>
+    <processType>AutoLaunchedFlow</processType>
+
+    <!--
+      [1] TRIGGER — an external-system-change trigger. This is what actually subscribes the
+      flow to a source; a <start> with only <triggerType> + <connector> deploys but never
+      fires, because it is bound to no event. The binding is three things:
+        - eventType  = externalEvent          the event category (a third-party connector event)
+        - eventName  = <Connector>.<Operation> REPLACE THIS with your connector's real event
+                       operation (e.g. an "on new/updated device" op your External Service
+                       exposes). "Sample.OnNewOrUpdatedDevice" is a placeholder.
+        - connection = ${Variables.FlowConnection_Sample}  the customer's registered External
+                       Service (bring-your-own; resolved when the template is instantiated).
+      pollingFrequency (${Variables.Frequency}) sets how often the poller checks the source.
+    -->
+    <start>
+        <locationX>50</locationX>
+        <locationY>0</locationY>
+        <connector>
+            <targetReference>Generate_Scan_Id</targetReference>
+        </connector>
+        <eventName>Sample.OnNewOrUpdatedDevice</eventName>
+        <eventType>externalEvent</eventType>
+        <inputs>
+            <name>scheduledStartDateTime</name>
+        </inputs>
+        <inputs>
+            <name>pollingFrequency</name>
+            <value>
+                <inputConfiguratorMode>Resource</inputConfiguratorMode>
+                <stringValue>${Variables.Frequency}</stringValue>
+            </value>
+        </inputs>
+        <inputs>
+            <name>connection</name>
+            <value>
+                <setupReference>${Variables.FlowConnection_Sample}</setupReference>
+                <setupReferenceType>ExternalServiceRegistration</setupReferenceType>
+            </value>
+        </inputs>
+        <triggerType>EnterpriseScaleExternalSystemChange</triggerType>
+    </start>
+
+    <status>Draft</status>
+
+    <!--
+      [4] TRANSFORMATION — the heart of a discovery flow.
+      Maps the inbound external event payload ($Event.ObjectType.*) onto the SampleComputeCI
+      Apex type. Each mapping is a <transformType>Map</transformType>:
+        - direct field copy      -> <elementReference>$Event.ObjectType.<field></elementReference>
+        - constant               -> <stringValue>...</stringValue>
+        - computed value         -> <formulaDataType> + <formulaExpression>  (put vendor logic here)
+      Child collections map per-item with the [$EachItem] syntax.
+      Only a representative handful of fields is mapped here; add your own the same way.
+    -->
+    <transforms>
+        <name>Map_Sample_Data_to_CI</name>
+        <label>Map Sample Data to CI</label>
+        <locationX>176</locationX>
+        <locationY>374</locationY>
+        <apexClass>sfcmdbSample__SampleComputeCI</apexClass>
+        <connector>
+            <targetReference>Create_Sample_CI_Records</targetReference>
+        </connector>
+        <dataType>Apex</dataType>
+        <isCollection>false</isCollection>
+        <scale>0</scale>
+        <storeOutputAutomatically>true</storeOutputAutomatically>
+        <transformValues>
+            <!-- Resolve the parent CI type. A vendor would compute this from OS family via a
+                 formula; kept as a constant here. -->
+            <transformValueActions>
+                <outputFieldApiName>cnfgItemTypeName</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <stringValue>Compute</stringValue>
+                </value>
+            </transformValueActions>
+            <!-- Child CI type name (per-item). "Sample Vulnerability" is the NEW custom CI
+                 type this package defines in metadata; this string MUST match the displayName
+                 in cnfgItemTypeDefs/SampleVulnerability.cnfgItemTypeDef-meta.xml or ingestion
+                 rejects the row ("isn't a valid CI type present in CMDB"). -->
+            <transformValueActions>
+                <outputFieldApiName>Vulnerabilities[$EachItem].cnfgItemTypeName</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <stringValue>Sample Vulnerability</stringValue>
+                </value>
+            </transformValueActions>
+            <!-- Child field copies (per-item) from the inbound vulnerabilities array.
+                 VulnerabilityId is the identity attribute (see the identification rule), so
+                 CMDB dedupes vulnerabilities per device by this value. -->
+            <transformValueActions>
+                <outputFieldApiName>Vulnerabilities[$EachItem].VulnerabilityId</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.vulnerabilities[$EachItem].cvex5fid</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>Vulnerabilities[$EachItem].Severity</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.vulnerabilities[$EachItem].severity</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>Vulnerabilities[$EachItem].Status</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.vulnerabilities[$EachItem].status</elementReference>
+                </value>
+            </transformValueActions>
+            <!-- Direct field copies from the inbound event payload. -->
+            <transformValueActions>
+                <outputFieldApiName>AssetName</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.displayx5fname</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>SerialNumber</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.serialx5fnumber</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>HostName</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.name</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>OperatingSystem</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.osx5fname</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>IpAddress</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.ipx5faddress</elementReference>
+                </value>
+            </transformValueActions>
+            <transformValueActions>
+                <outputFieldApiName>MacAddress</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.macx5faddress</elementReference>
+                </value>
+            </transformValueActions>
+            <!-- The two Sample-specific attributes added to the standard Compute type. -->
+            <!-- Example of a COMPUTED value: put your vendor-specific parsing logic in the
+                 formula. Here we just pass the raw agent status through TEXT(). -->
+            <transformValueActions>
+                <outputFieldApiName>SampleAgentStatus</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <formulaDataType>String</formulaDataType>
+                    <formulaExpression>TEXT({!$Event.ObjectType.agentx5fstatus})</formulaExpression>
+                </value>
+            </transformValueActions>
+            <!-- Direct copy of the compliance state. -->
+            <transformValueActions>
+                <outputFieldApiName>SampleComplianceState</outputFieldApiName>
+                <transformType>Map</transformType>
+                <value>
+                    <elementReference>$Event.ObjectType.compliancex5fstate</elementReference>
+                </value>
+            </transformValueActions>
+        </transformValues>
+    </transforms>
+</Flow>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CnfgItemAttrDef xmlns="http://soap.sforce.com/2006/04/metadata">
+    <dataType>Text</dataType>
+    <displayName>Sample Compliance State</displayName>
+    <isActive>false</isActive>
+    <isHidden>false</isHidden>
+    <isMain>false</isMain>
+    <isRequired>false</isRequired>
+    <isUsedForCorrelation>false</isUsedForCorrelation>
+    <label>MasterLabel</label>
+</CnfgItemAttrDef>

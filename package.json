@@ -1,0 +1,26 @@
+{
+  "name": "cmdb-discovery-reference",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Reference 2GP managed package showing how to build a Salesforce CMDB discovery integration.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "lint": "eslint --no-error-on-unmatched-pattern \"**/{aura,lwc}/**/*.js\"",
+    "test": "npm run test:unit",
+    "test:unit": "sfdx-lwc-jest",
+    "test:unit:coverage": "sfdx-lwc-jest --coverage",
+    "prettier": "prettier --write \"**/*.{css,html,js,json,md,yaml,yml}\"",
+    "prettier:verify": "prettier --check \"**/*.{css,html,js,json,md,yaml,yml}\""
+  },
+  "devDependencies": {
+    "@lwc/eslint-plugin-lwc": "^2.0.0",
+    "@salesforce/eslint-config-lwc": "^3.5.3",
+    "@salesforce/eslint-plugin-lightning": "^1.0.1",
+    "@salesforce/sfdx-lwc-jest": "^5.1.0",
+    "eslint": "^8.57.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-jest": "^27.9.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.4.5"
+  }
+}

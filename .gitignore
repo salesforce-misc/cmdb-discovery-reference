@@ -1,0 +1,14 @@
+# Salesforce DX
+.sfdx/
+.sf/
+.localdevserver/
+deploy-options.json
+
+# Node / LWC tooling
+node_modules/
+coverage/
+.eslintcache
+*.log
+
+# OS
+.DS_Store

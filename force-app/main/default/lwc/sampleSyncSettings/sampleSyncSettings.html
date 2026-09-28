@@ -1,0 +1,18 @@
+<template>
+  <div class="slds-grid slds-wrap slds-gutters_small">
+    <div class="slds-col slds-size_1-of-1 slds-p-bottom_small">
+      <div class="field-half">
+        <lightning-input
+          type="toggle"
+          label={labels.SyncVulnerabilities}
+          checked={syncVulnerabilities}
+          onchange={handleToggleChange}
+          message-toggle-active=""
+          message-toggle-inactive=""
+          disabled={isViewMode}
+        >
+        </lightning-input>
+      </div>
+    </div>
+  </div>
+</template>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Binds the Severity attribute to the Sample Vulnerability type. -->
+<CnfgItemTypeAttrRelDef xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cnfgItemAttrDef>SampleVulnerabilitySeverity</cnfgItemAttrDef>
+    <cnfgItemTypeDef>SampleVulnerability</cnfgItemTypeDef>
+    <isActive>false</isActive>
+    <isHidden>false</isHidden>
+    <isMain>false</isMain>
+    <isPrimary>false</isPrimary>
+    <isReadOnly>false</isReadOnly>
+    <isRequired>false</isRequired>
+    <isUsedInRelMap>false</isUsedInRelMap>
+    <label>MasterLabel</label>
+</CnfgItemTypeAttrRelDef>

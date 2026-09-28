@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CnfgItemAttrSetAttr xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cnfgItemAttrDisplayGroup>Sample_Compute_Attributes</cnfgItemAttrDisplayGroup>
+    <configurationItemAttribute>SampleAgentStatus</configurationItemAttribute>
+    <label>DeveloperName</label>
+</CnfgItemAttrSetAttr>

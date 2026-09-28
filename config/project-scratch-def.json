@@ -1,0 +1,13 @@
+{
+  "orgName": "CMDB Discovery Reference",
+  "edition": "Developer",
+  "features": ["EnableSetPasswordInApi", "CMDB", "AssetDiscovery"],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    }
+  }
+}

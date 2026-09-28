@@ -1,0 +1,29 @@
+{
+  "label": "Sync Data from Sample to Salesforce CMDB",
+  "description": "Automates discovery, polling, and synchronization of device and installed-software inventory from Sample into Salesforce CMDB.",
+  "releaseInfo": {
+    "templateVersion": "1.0",
+    "notesFile": null
+  },
+  "templateType": "App",
+  "templateSubtype": "Flow",
+  "name": "SyncSampleToCMDB",
+  "namespace": null,
+  "assetVersion": 67.0,
+  "maxAppCount": null,
+  "icons": {
+    "templatePreviews": [],
+    "layoutImages": []
+  },
+  "variableDefinition": "variables.json",
+  "layoutDefinition": "layout.json",
+  "tags": {
+    "flowIntegrationConnectors": ["Sample"],
+    "categoryTags": ["EventsCategoryTag"],
+    "flowType": ["AutoLaunchedFlow", "EnterpriseScaleExternalSystemChange"]
+  },
+  "chainDefinitions": [
+    { "type": "Create", "name": null, "file": "create-chain.json" }
+  ],
+  "templateStatus": null
+}

@@ -1,0 +1,26 @@
+{
+  "packageDirectories": [
+    {
+      "path": "force-app",
+      "default": true,
+      "package": "CMDB Discovery Reference",
+      "versionName": "ver 1.1",
+      "versionNumber": "1.1.0.NEXT",
+      "versionDescription": "Reference/sample CMDB discovery integration partners clone to build their own. Extends the standard Compute CI type and ships a custom Sample Vulnerability CI type.",
+      "postInstallScript": "SamplePostInstall",
+      "uninstallScript": "SampleUninstall",
+      "definitionFile": "config/project-scratch-def.json"
+    }
+  ],
+  "namespace": "sfcmdbSample",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "67.0",
+  "packageAliases": {
+    "CMDB Discovery Reference": "0HoSB0000001CFF0A2",
+    "CMDB Discovery Reference@1.1.0-2": "04tSB000000OoOfYAK",
+    "CMDB Discovery Reference@1.1.0-3": "04tSB000000OoQHYA0",
+    "CMDB Discovery Reference@1.1.0-4": "04tSB000000OoRtYAK",
+    "CMDB Discovery Reference@1.1.0-5": "04tSB000000OoTVYA0",
+    "CMDB Discovery Reference@1.1.0-6": "04tSB000000OphJYAS"
+  }
+}

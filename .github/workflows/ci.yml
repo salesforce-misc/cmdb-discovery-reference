@@ -1,0 +1,38 @@
+name: CI
+
+# Runs on every PR and on pushes to main.
+#
+# lint-and-unit-tests needs no Salesforce org: it lints, verifies formatting, and runs
+# the LWC Jest suite with coverage. Apex tests require a real org, so they are run
+# locally / pre-release via `sf apex run test` (see README) rather than in CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Check formatting (Prettier)
+        run: npm run prettier:verify
+
+      - name: LWC unit tests
+        run: npm run test:unit:coverage

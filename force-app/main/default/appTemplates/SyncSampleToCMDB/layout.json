@@ -1,0 +1,31 @@
+{
+  "pages": [
+    {
+      "title": "Sample Data to Salesforce CMDB Sync",
+      "type": "Configuration",
+      "navigation": { "label": "Sample Data to Salesforce CMDB Sync" },
+      "layout": {
+        "type": "Component",
+        "module": "automation_integration/appFrameworkFlowTemplatePreview",
+        "properties": {}
+      }
+    },
+    {
+      "title": "Configure Sample Data to Salesforce CMDB Sync",
+      "type": "Configuration",
+      "navigation": { "label": "Configure Sync" },
+      "layout": {
+        "type": "Component",
+        "module": "automation_integration/appFrameworkFlowTemplateConfig",
+        "properties": {},
+        "variables": [
+          { "name": "FlowLabelName" },
+          { "name": "FlowApiName" },
+          { "name": "FlowConnection_Sample" },
+          { "name": "Frequency" },
+          { "name": "SyncVulnerabilities" }
+        ]
+      }
+    }
+  ]
+}

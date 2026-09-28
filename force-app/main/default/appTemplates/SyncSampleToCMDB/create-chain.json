@@ -1,0 +1,22 @@
+{
+  "name": "SyncSampleToCMDB",
+  "label": "Sync Data from Sample to Salesforce CMDB",
+  "parameters": {},
+  "dominoVariant": "sfdc_internal__UnifiedAnalyticsDominoVariant",
+  "definition": {
+    "nodes": {
+      "upsert_flow_SyncSampleToCMDB": {
+        "referenceId": "upsert_flow_SyncSampleToCMDB",
+        "graphNodeType": { "name": "FlowDefinitionUpsert" },
+        "parameters": {
+          "name": "SyncSampleToCMDB",
+          "label": "${Variables.FlowLabelName}",
+          "devName": "${Variables.FlowApiName}",
+          "file": "flows/SyncSampleToCMDB.xml"
+        },
+        "sources": []
+      }
+    }
+  },
+  "finallyDefinition": { "nodes": {} }
+}
