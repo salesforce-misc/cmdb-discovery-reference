@@ -17,9 +17,8 @@
  *     attribute defs (SampleAgentStatus / SampleComplianceState).
  * A non-packaged record that references a packaged component makes the uninstall fail outright:
  * "Can't uninstall package because an external component is referencing a component in this
- * package" (reasonCode 10). This happens on ANY org where registration actually ran (any org
- * with the standard Compute type) — it was not seen in a bare scratch org only because
- * SampleRegistrationQueueable degrades there and never creates the references.
+ * package" (reasonCode 10). This happens on EVERY CMDB org the package is installed into,
+ * since Compute is out-of-the-box content and registration always creates the references.
  *
  * These records CANNOT be cleared from onUninstall: the platform validates external references
  * BEFORE it invokes the UninstallHandler, so a handler that deletes them never gets to run — the

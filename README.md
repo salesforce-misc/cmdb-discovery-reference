@@ -39,7 +39,8 @@ force-app/main/default/
 ├── classes/
 │   ├── SampleComputeCI.cls              Parent CI DTO — standard Compute type + 2 attributes
 │   ├── SampleVulnerabilityCI.cls        Child CI DTO — the NEW "Sample Vulnerability" type
-│   ├── SamplePostInstall.cls            Creates the discovery probe at install time
+│   ├── SamplePostInstall.cls            Install handler — enqueues the two registration jobs below
+│   ├── SampleProbeRegistrationQueueable.cls  Creates the discovery probe (setup objects)
 │   ├── SampleRegistrationQueueable.cls  Creates the source + binds the 2 attributes to Compute
 │   ├── SampleUninstall.cls              prepareForUninstall() pre-step + disables source on uninstall
 │   └── *Test.cls                        Tests
@@ -55,9 +56,10 @@ force-app/main/default/
 ├── contentassets/SampleVulnerabilityIcon.*  Icon for the new CI type (linked from its typeDef)
 └── staticresources/SampleIcon.*         Probe icon
 
-(Three things are created at runtime rather than shipped as metadata: the discovery source
- and the Compute → Vulnerability parent/child link in SampleRegistrationQueueable, and the
- discovery probe in SamplePostInstall — see the ship-vs-runtime table below for why.)
+(Some things are created at runtime rather than shipped as metadata: the discovery source,
+ the Compute attribute bindings, and the Compute → Vulnerability parent/child link in
+ SampleRegistrationQueueable, and the discovery probe in SampleProbeRegistrationQueueable —
+ see the ship-vs-runtime table below for why.)
 ```
 
 ## The two ways to model data in CMDB (both shown here)
@@ -91,11 +93,14 @@ type you own is defined entirely in _metadata_. This sample does both.
       -> [4] Map_Sample_Data_to_CI   TRANSFORM: event payload -> SampleComputeCI
       |                                 - Compute fields + Agent Status + Compliance State
       |                                 - Vulnerabilities[] children (cnfgItemTypeName = "Sample Vulnerability")
+      -> Check_Sync_Vulnerabilities  DECISION: "Sync Vulnerabilities" off -> drop the children
       -> [5] Create_Sample_CI_Records CMDB ACTION: createIntegrationRecordsInCmdb
 ```
 
 The transform shows the mapping idioms you'll use: direct field copy, constant, formula, and
-per-item child mapping with `[$EachItem]`.
+per-item child mapping with `[$EachItem]`. The decision after it shows a per-component toggle:
+the **Sync Vulnerabilities** option on the template's Configure page (the `sampleSyncSettings`
+property editor) decides whether the vulnerability children are sent to CMDB.
 
 ## What is deliberately NOT here
 
@@ -112,7 +117,7 @@ per-item child mapping with `[$EachItem]`.
 > managed package, register your own namespace and replace `sfcmdbSample` in
 > `sfdx-project.json` (the `namespace` field), in the flow's `apexClass` refs
 > (`appTemplates/SyncSampleToCMDB/flows/SyncSampleToCMDB.xml`), and in the probe
-> icon reference (`staticresources/SampleIcon.resource-meta.xml`). `SamplePostInstall`
+> icon reference (`staticresources/SampleIcon.resource-meta.xml`). `SampleProbeRegistrationQueueable`
 > reads the namespace at runtime, so there is no Apex constant to change.
 
 ```bash

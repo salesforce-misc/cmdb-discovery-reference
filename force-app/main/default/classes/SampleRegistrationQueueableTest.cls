@@ -82,15 +82,22 @@ private class SampleRegistrationQueueableTest {
         System.enqueueJob(new SampleRegistrationQueueable('SampleVulnerability'));
         Test.stopTest();
 
-        // Source registration always runs regardless of standard-data availability.
-        CnfgItemSourceDefinition src = [
-            SELECT IsEnabled, IsActive
-            FROM CnfgItemSourceDefinition
-            WHERE DeveloperName = 'Sample'
-            LIMIT 1
+        // Both Sample attributes must now be bound to the type the queueable was pointed at.
+        Integer bindings = [
+            SELECT COUNT()
+            FROM CnfgItemTypeAttrRelDef
+            WHERE DeveloperName IN ('Sample_Compute_SampleAgentStatus', 'Sample_Compute_SampleComplianceState')
         ];
-        System.assertEquals(true, src.IsEnabled, 'Registration must enable the source');
-        System.assertEquals(true, src.IsActive, 'Registration must activate the source');
+        System.assertEquals(2, bindings, 'Registration must bind both Sample attributes to the type');
+
+        // Running again must not duplicate them.
+        new SampleRegistrationQueueable('SampleVulnerability').execute(null);
+        Integer afterRerun = [
+            SELECT COUNT()
+            FROM CnfgItemTypeAttrRelDef
+            WHERE DeveloperName IN ('Sample_Compute_SampleAgentStatus', 'Sample_Compute_SampleComplianceState')
+        ];
+        System.assertEquals(2, afterRerun, 'Re-running registration must not duplicate bindings');
     }
 
     @isTest
