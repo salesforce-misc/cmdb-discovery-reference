@@ -19,22 +19,25 @@
  *   - CnfgItemTypeRelationDef    (declare the new Vulnerability type as a child of Compute) —
  *                                both reference platform-standard data (the built-in Compute
  *                                type SD_Comxx1 and the standard "Parent/Child" relationship
- *                                type SD_PaCh) that exists in a real Agentforce for IT Service
- *                                org but is NOT part of this package; shipping them as static
- *                                metadata would make the package fail to install where that
- *                                standard data is absent, so they bind at runtime instead.
+ *                                type SD_PaCh) that ships out of the box in every CMDB org but
+ *                                is NOT part of this package. A package can't ship a binding
+ *                                against a standard type it doesn't own, and the packaging
+ *                                build org has no CMDB standard content, so they bind at
+ *                                runtime instead.
  * By contrast the new CI type itself (CnfgItemTypeDef), its identity rule, its own
  * attributes, and their property groups ship as static metadata, because they reference only
  * this package's own definitions. See docs/ARCHITECTURE.md ("What ships as metadata vs.
  * what's created at runtime") for the full ship-vs-runtime table.
  *
- * GRACEFUL DEGRADATION
- * --------------------
- * The two standard-data-dependent steps return quietly under Test.isRunningTest() when that
- * standard data is missing (so the package still installs and its tests still pass in a bare
- * org) and otherwise throw a clear RegistrationException naming the missing developer name.
- * Source creation has no standard-data dependency, so it always runs. All queries and DML run
- * idempotently in AccessLevel.SYSTEM_MODE.
+ * TEST-ONLY GUARD
+ * ---------------
+ * Compute and Parent/Child are out-of-the-box CMDB content, present in every org this package
+ * installs into. The one place they're missing is the bare packaging build org where the Apex
+ * tests run during `sf package version create` — so the two standard-data-dependent steps
+ * return quietly under Test.isRunningTest() when that data is missing, and otherwise throw a
+ * clear RegistrationException naming the missing developer name (visible in
+ * AsyncApexJob.ExtendedStatus). Don't add further defensive handling for a missing Compute
+ * type when you fork this. All queries and DML run idempotently in AccessLevel.SYSTEM_MODE.
  */
 global without sharing class SampleRegistrationQueueable implements Queueable {
 
@@ -53,7 +56,7 @@ global without sharing class SampleRegistrationQueueable implements Queueable {
 
     // Developer name of the standard Compute CI type this package's attributes attach to.
     // Injected via constructor so it can be overridden in unit tests: the standard Compute type
-    // is absent from a bare packaging build org, so a test can instead point the binding logic at
+    // is absent from the bare packaging build org the tests run in, so a test can instead point the binding logic at
     // a CI type that IS present there — e.g. this package's own shipped SampleVulnerability type —
     // and exercise the real resolve/insert paths. Production always uses the no-arg constructor,
     // which binds to the standard Compute type.

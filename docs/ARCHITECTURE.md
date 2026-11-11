@@ -12,9 +12,9 @@ from this reference.
    SyncSampleToCMDB  (App Framework flow template)
         │  [1] TRIGGER  triggerType = EnterpriseScaleExternalSystemChange
         ▼
-   Generate_Scan_Id ─▶ Get_Device_Details ─▶ Map_Sample_Data_to_CI ─▶ Create_Sample_CI_Records
-    [2] (platform)   [3] (externalConnector,  [4] TRANSFORM           [5] CMDB ACTION (platform:
-                         bring-your-own            $Event.ObjectType.*     createIntegrationRecordsInCmdb)
+   Generate_Scan_Id ─▶ Get_Device_Details ─▶ Map_Sample_Data_to_CI ─▶ Check_Sync_Vulnerabilities ─▶ Create_Sample_CI_Records
+    [2] (platform)   [3] (externalConnector,  [4] TRANSFORM           DECISION: option off ─▶      [5] CMDB ACTION (platform:
+                         bring-your-own            $Event.ObjectType.*  drop Vulnerabilities[]          createIntegrationRecordsInCmdb)
                          connection)               -> SampleComputeCI
         │
         ▼
@@ -45,6 +45,13 @@ Vulnerability children — so every attribute and CI type the package ships is e
 It shows the mapping idioms you'll use: direct field copy, a constant, a formula, and per-item
 child mapping with `[$EachItem]`.
 
+**Per-component toggles.** The transform always maps the vulnerability children; the
+`Check_Sync_Vulnerabilities` decision then clears `Vulnerabilities` unless the **Sync
+Vulnerabilities** template option is on. The option is collected by the `sampleSyncSettings`
+property editor, stored in the `SyncVulnerabilities` template variable, and read in the flow
+through the `SyncVulnerabilitiesSetting` constant (`${Variables.SyncVulnerabilities}`, resolved
+when the template is instantiated). Add one decision rule like this per optional child collection.
+
 ## The new CI type ("Sample Vulnerability") and its metadata
 
 An incoming CI is matched to a CI type by NAME (`cnfgItemTypeName`); if the name doesn't
@@ -71,8 +78,7 @@ you fork.
 The type and its identity rule ship as metadata because they reference only this package's
 own attributes. The Compute → Vulnerability link cannot: it points at the standard Compute
 type and the standard Parent/Child relationship type, so `SampleRegistrationQueueable`
-creates it at runtime (both objects are DML-createable) and degrades gracefully if that
-standard data is absent.
+creates it at runtime (both objects are DML-createable).
 
 Why the identity rule matters: a _component_ CI is identified relative to its parent. Without
 an identity rule (or a primary attribute), every vulnerability under one computer would
@@ -89,25 +95,41 @@ by the Queueable (see below).
 ## Install-time registration (package install / upgrade)
 
 ```
-   Package install ─▶ SamplePostInstall.onInstall(ctx)
+   Package install / upgrade ─▶ SamplePostInstall.onInstall(ctx)      (no DML — only enqueues)
         │
-        ├─ previousVersion == null (first install)
-        │     ├─ insert CnfgMgmtDiscoveryProbe / CnfgMgmtProbeFlowTmpl / CnfgMgmtProbePrvwAttrDef   (non-setup, synchronous)
-        │     └─ System.enqueueJob(SampleRegistrationQueueable)                                     (setup, separate txn)
-        │            ├─ create CnfgItemSourceDefinition "Sample"
-        │            └─ bind the 2 Sample attributes to the standard Compute type (CnfgItemTypeAttrRelDef)
+        ├─ System.enqueueJob(SampleProbeRegistrationQueueable(isUpgrade))   (SETUP objects, own txn)
+        │     ├─ first install: insert CnfgMgmtDiscoveryProbe
+        │     ├─ upgrade:       update the existing probe's CPE / icon references
+        │     └─ both:          insert any missing CnfgMgmtProbeFlowTmpl / CnfgMgmtProbePrvwAttrDef rows
         │
-        │  (The NEW Sample Vulnerability type ships as metadata — the cnfgItem* files — so it
-        │   needs no runtime registration. Only the binding to the STANDARD Compute type is
-        │   done here, because you can't package a binding against a standard type as metadata.)
-        │
-        └─ previousVersion != null (upgrade)
-              └─ reconcileExistingRegistration()  (idempotent — no duplicates)
+        └─ System.enqueueJob(SampleRegistrationQueueable)                   (NON-SETUP objects, own txn)
+              ├─ create (or re-enable) CnfgItemSourceDefinition "Sample"
+              ├─ bind the 2 Sample attributes to the standard Compute type (CnfgItemTypeAttrRelDef)
+              └─ link Compute ──Parent/Child──▶ Sample Vulnerability (CnfgItemTypeRelationDef)
+
+   (The NEW Sample Vulnerability type ships as metadata — the cnfgItem* files — so it needs no
+    runtime registration. Only the bindings to the STANDARD Compute type are done here, because
+    you can't package a binding against a standard type as metadata.)
 ```
 
-Everything runs in `AccessLevel.SYSTEM_MODE`. The non-setup / setup split is what avoids the
-mixed-DML exception — that's why the source-enable + attribute-binding work is deferred to a
-`Queueable` rather than done inline in `onInstall`.
+Everything runs in `AccessLevel.SYSTEM_MODE`, and every step is idempotent, so both jobs run
+on first install **and** on every upgrade. `onInstall` itself does no DML: the install
+transaction does its own DML, `CnfgMgmt*` probe rows are _setup_ objects and `CnfgItem*`
+definitions are _non-setup_ objects, and mixing any of these in one transaction throws
+`MIXED_DML_OPERATION` and aborts the install. One job per family keeps each in a clean
+transaction. The jobs let exceptions propagate, so a failure is recorded in
+`AsyncApexJob.ExtendedStatus` (the install itself has already completed).
+
+Because upgrades run the same "insert what's missing" steps as a first install, a later version
+that adds a preview column (`PREVIEW_ATTR_DEVNAMES`) or an attribute binding
+(`SAMPLE_ATTR_DEVNAMES`) reaches orgs that upgrade, not just fresh installs.
+
+**Standard CMDB content is always there.** Compute (`SD_Comxx1`) and the Parent/Child
+relationship type (`SD_PaCh`) are out-of-the-box CMDB content, present in every org the package
+installs into. The `Test.isRunningTest()` guards in `SampleRegistrationQueueable` exist only
+because the Apex tests also run in the bare packaging build org during
+`sf package version create`, which has no CMDB standard content. Outside tests, a missing
+definition throws a `RegistrationException`; don't add further handling for it when you fork.
 
 ## Uninstall (package removal)
 
@@ -131,9 +153,8 @@ packaged component makes the uninstall **fail outright**:
 > Can't uninstall package because an external component is referencing a component in this
 > package. (reasonCode 10)
 
-This bites on **any org where registration actually ran** (any org with the standard Compute
-type) — a bare scratch org never sees it because the Queueable degrades there and never creates
-the references.
+This happens on **every CMDB org** the package is installed into, since Compute is
+out-of-the-box content and registration always creates these references.
 
 **Why `onUninstall` can't fix this itself.** The platform validates external references **before**
 it invokes the `UninstallHandler`, so a handler that deletes the references never gets to run —
@@ -159,30 +180,31 @@ Definitions you fully **own** ship as metadata. Anything that binds to a **stand
 package doesn't own is created at runtime by `SampleRegistrationQueueable`, against whatever the
 target org actually has (with a graceful guard when the standard data isn't present).
 
-| Definition                                                                                              | Ships as…                                                              |
-| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Attributes (`CnfgItemAttrDef`) and their property groups (`CnfgItemAttrSetDef` + `CnfgItemAttrSetAttr`) | metadata                                                               |
-| The new type and its identity (`CnfgItemTypeDef`, `CnfgItemTypeIdentRule`, `CnfgItemTypeIdentFieldMap`) | metadata                                                               |
-| Attribute bindings to **your own** type (`CnfgItemTypeAttrRelDef` → Sample Vulnerability)               | metadata                                                               |
-| The discovery source (`CnfgItemSourceDefinition`)                                                       | **runtime** (`SampleRegistrationQueueable`) — see uninstall note below |
-| The discovery probe (`CnfgMgmtDiscoveryProbe` + flow template + preview attrs)                          | **runtime** (`SamplePostInstall`) — see uninstall note below           |
-| Attribute bindings to the **standard** Compute type (`CnfgItemTypeAttrRelDef` → Compute)                | **runtime** (`SampleRegistrationQueueable`)                            |
-| Relationship to a **standard** type (`CnfgItemTypeRelationDef` → Compute / `SD_PaCh`)                   | **runtime** (`SampleRegistrationQueueable`)                            |
+| Definition                                                                                              | Ships as…                                                         |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Attributes (`CnfgItemAttrDef`) and their property groups (`CnfgItemAttrSetDef` + `CnfgItemAttrSetAttr`) | metadata                                                          |
+| The new type and its identity (`CnfgItemTypeDef`, `CnfgItemTypeIdentRule`, `CnfgItemTypeIdentFieldMap`) | metadata                                                          |
+| Attribute bindings to **your own** type (`CnfgItemTypeAttrRelDef` → Sample Vulnerability)               | metadata                                                          |
+| The discovery source (`CnfgItemSourceDefinition`)                                                       | **runtime** (`SampleRegistrationQueueable`) — see note below      |
+| The discovery probe (`CnfgMgmtDiscoveryProbe` + flow template + preview attrs)                          | **runtime** (`SampleProbeRegistrationQueueable`) — see note below |
+| Attribute bindings to the **standard** Compute type (`CnfgItemTypeAttrRelDef` → Compute)                | **runtime** (`SampleRegistrationQueueable`)                       |
+| Relationship to a **standard** type (`CnfgItemTypeRelationDef` → Compute / `SD_PaCh`)                   | **runtime** (`SampleRegistrationQueueable`)                       |
 
 Rule of thumb: **your own definitions ship as metadata; two things are deliberately created at
 runtime instead** —
 
 1. **Anything that references a standard type the package doesn't own** (the Compute attribute
-   bindings and the Compute → Vulnerability relation), because the target org may not have that
-   standard content yet — hence the `Test.isRunningTest()` guards in the Queueable.
+   bindings and the Compute → Vulnerability relation), because a package can't ship a binding
+   against a standard type it doesn't own. (The standard content is always present in CMDB orgs;
+   the `Test.isRunningTest()` guards in the Queueable only cover the bare packaging build org.)
 2. **The discovery source and the discovery probe** (`CnfgItemSourceDefinition`,
    `CnfgMgmtDiscoveryProbe` + its flow template and preview attributes). These are runtime
    registration records that discovered data becomes associated with after install (CI records
    carry the source's `SourceName`; scans point at the probe). Keep them **out of packaged
    metadata** so that uninstalling the package doesn't remove records the discovered CI data
    depends on — create them at runtime instead (the source in `SampleRegistrationQueueable`, the
-   probe in `SamplePostInstall`), and make the inserts **idempotent** so re-install/upgrade never
-   duplicates them.
+   probe in `SampleProbeRegistrationQueueable`), and make the inserts **idempotent** so
+   re-install/upgrade never duplicates them.
 
 > Property groups: every attribute belongs to a property group (`CnfgItemAttrSetAttr` →
 > `CnfgItemAttrSetDef`) — see the CMDB object-modeling documentation for the data model. This
@@ -194,11 +216,11 @@ runtime instead** —
 | You want to…                        | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Rename the vendor                   | Replace `Sample` / `sfcmdbSample` everywhere; rename the `Sample*` classes, the LWC folder, the template folder, and the `cnfgItem*` files                                                                                                                                                                                                                                                                                                                                |
-| Set your namespace                  | `sfdx-project.json` → `namespace`; the `apexClass` refs in the flow. `SamplePostInstall` detects the namespace at runtime, so there is no constant to edit                                                                                                                                                                                                                                                                                                                |
+| Set your namespace                  | `sfdx-project.json` → `namespace`; the `apexClass` refs in the flow. `SampleProbeRegistrationQueueable` detects the namespace at runtime, so there is no constant to edit                                                                                                                                                                                                                                                                                                 |
 | Add an attribute to a standard type | Add an `@AuraEnabled` field to `SampleComputeCI` + a label-map entry; add a `cnfgItemAttrDefs/` file; register it in `SampleRegistrationQueueable.SAMPLE_ATTR_DEVNAMES`; map it in the transform                                                                                                                                                                                                                                                                          |
 | Add a **new** CI type               | Follow the `SampleVulnerability` set: a `cnfgItemTypeDefs/` file, its `cnfgItemAttrDefs/`, `cnfgItemTypeAttrRelDefs/` bindings, and a `cnfgItemTypeIdentRules/` + `cnfgItemTypeIdentFieldMaps/` identity (all metadata); link it to its parent at runtime in `SampleRegistrationQueueable` (the link references the standard parent type, so it can't ship as metadata); add the matching `*CI` Apex class + a `List<>` on the parent + a `[$EachItem]` transform mapping |
 | Real API calls                      | Replace `Sample.GetDeviceDetails` in the flow with your External Service operations; the connection stays bring-your-own                                                                                                                                                                                                                                                                                                                                                  |
-| Config UI options                   | Edit `lwc/sampleSyncSettings/` and the matching entries in `variables.json` / `layout.json`                                                                                                                                                                                                                                                                                                                                                                               |
+| Config UI options                   | Edit `lwc/sampleSyncSettings/` and the matching entries in `variables.json` / `layout.json`, then read the variable in the flow (see the `SyncVulnerabilitiesSetting` constant and `Check_Sync_Vulnerabilities` decision)                                                                                                                                                                                                                                                 |
 
 ## What is deliberately NOT here
 

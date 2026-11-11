@@ -37,9 +37,10 @@ global class SampleComputeCI extends ItSvcAssetDcvr.BaseParentCnfgItem {
         super(SAMPLE_COMPUTE_LABELS);
     }
 
-    // Child inventory: security vulnerabilities found on this device. Populated only when
-    // "Sync Vulnerabilities" is enabled on the template. Each element is a NEW custom CI
-    // type — see SampleVulnerabilityCI. Add more collections following this pattern.
+    // Child inventory: security vulnerabilities found on this device. The Flow maps this
+    // only when "Sync Vulnerabilities" is enabled on the template (Check_Sync_Vulnerabilities
+    // decision); otherwise it stays null. Each element is a NEW custom CI type — see
+    // SampleVulnerabilityCI. Add more collections following this pattern.
     @AuraEnabled global List<SampleVulnerabilityCI> Vulnerabilities;
 
     // Standard asset-identity attributes (map to platform SD_* attribute developer names).

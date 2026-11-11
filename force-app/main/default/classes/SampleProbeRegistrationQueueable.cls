@@ -22,7 +22,9 @@
  * IDEMPOTENCY
  * -----------
  * Enqueued on first install and on upgrades, so every insert is guarded by an existence
- * check — upgrades must never create duplicate rows.
+ * check — upgrades must never create duplicate rows. Upgrades run the same "add what's
+ * missing" steps as a first install, so rows a newer version adds (e.g. an extra preview
+ * column) also reach orgs that upgrade.
  */
 global without sharing class SampleProbeRegistrationQueueable implements Queueable {
 
@@ -41,8 +43,9 @@ global without sharing class SampleProbeRegistrationQueueable implements Queueab
         'SmplPrvw_SD_AsNa', 'SmplPrvw_SD_HoNa', 'SmplPrvw_SD_OpSy', 'SmplPrvw_SD_IpAd', 'SmplPrvw_SD_SeNu'
     };
 
-    // On upgrade we reconcile the string component references (CPE / icon) rather than
-    // re-create the probe; on first install we create everything.
+    // On upgrade we update the existing probe's string component references (CPE / icon)
+    // rather than re-create it; on first install we create it. Both then fill in any missing
+    // flow template / preview-column rows.
     private final Boolean isUpgrade;
 
     global SampleProbeRegistrationQueueable() {
@@ -50,7 +53,7 @@ global without sharing class SampleProbeRegistrationQueueable implements Queueab
     }
 
     // global so SamplePostInstall can distinguish first-install (create) from upgrade
-    // (reconcile). Passing true routes execute() to reconcileExistingRegistration().
+    // (update the existing probe's CPE / icon references).
     global SampleProbeRegistrationQueueable(Boolean isUpgrade) {
         this.isUpgrade = isUpgrade;
     }
@@ -61,11 +64,7 @@ global without sharing class SampleProbeRegistrationQueueable implements Queueab
         // job's AsyncApexJob.ExtendedStatus — the one place post-install async failures are
         // queryable (trace flags capture nothing here). Swallowing and only logging would
         // recreate the original silent 0-rows failure that made this bug so hard to find.
-        if (isUpgrade) {
-            reconcileExistingRegistration();
-        } else {
-            insertProbeRegistration();
-        }
+        registerProbe(isUpgrade);
     }
 
     // The namespace this package is installed under, detected at runtime: "" for a
@@ -94,45 +93,63 @@ global without sharing class SampleProbeRegistrationQueueable implements Queueab
     private static String iconDevName()     { return nsPrefix() + 'SampleIcon'; }
     private static String templateApiName() { return nsPrefix() + 'SyncSampleToCMDB'; }
 
-    private static void insertProbeRegistration() {
-        Id probeId;
-        List<CnfgMgmtDiscoveryProbe> existingProbes = Database.query(
+    // First install: create the probe. Upgrade: point the existing probe at this version's
+    // CPE / icon (creating it if it's somehow gone). Either way, then add any flow template or
+    // preview-column rows that are missing — so a later version that adds a preview column
+    // reaches orgs that upgrade, not just fresh installs.
+    private static void registerProbe(Boolean isUpgrade) {
+        Id probeId = ensureProbe(isUpgrade);
+        ensureFlowTemplate(probeId);
+        ensurePreviewAttrs(probeId);
+    }
+
+    private static Id ensureProbe(Boolean isUpgrade) {
+        List<CnfgMgmtDiscoveryProbe> existing = Database.query(
             'SELECT Id FROM CnfgMgmtDiscoveryProbe WHERE ExternalProbeType = :EXTERNAL_PROBE_TYPE LIMIT 1',
             AccessLevel.SYSTEM_MODE);
-        if (!existingProbes.isEmpty()) {
-            probeId = existingProbes[0].Id;
-        } else {
-            CnfgMgmtDiscoveryProbe probe = new CnfgMgmtDiscoveryProbe();
-            probe.Name              = PROBE_NAME;
-            probe.Description       = PROBE_DESC;
-            probe.Category          = PROBE_CATEGORY;
-            probe.ProbeType         = PROBE_TYPE;
-            probe.ExternalProbeType = EXTERNAL_PROBE_TYPE;
-            probe.ExtlCnctrDevlName = CONNECTOR_DEVNAME;
-            probe.ExtlProbeCpntName = cpeDevName();
-            probe.ProbeIconPath     = iconDevName();
-            Database.insert(probe, AccessLevel.SYSTEM_MODE);
-            probeId = probe.Id;
+        if (!existing.isEmpty()) {
+            if (isUpgrade) {
+                Database.update(new CnfgMgmtDiscoveryProbe(
+                    Id                = existing[0].Id,
+                    ExtlProbeCpntName = cpeDevName(),
+                    ProbeIconPath     = iconDevName()), AccessLevel.SYSTEM_MODE);
+            }
+            return existing[0].Id;
         }
+        CnfgMgmtDiscoveryProbe probe = new CnfgMgmtDiscoveryProbe();
+        probe.Name              = PROBE_NAME;
+        probe.Description       = PROBE_DESC;
+        probe.Category          = PROBE_CATEGORY;
+        probe.ProbeType         = PROBE_TYPE;
+        probe.ExternalProbeType = EXTERNAL_PROBE_TYPE;
+        probe.ExtlCnctrDevlName = CONNECTOR_DEVNAME;
+        probe.ExtlProbeCpntName = cpeDevName();
+        probe.ProbeIconPath     = iconDevName();
+        Database.insert(probe, AccessLevel.SYSTEM_MODE);
+        return probe.Id;
+    }
 
+    private static void ensureFlowTemplate(Id probeId) {
         List<CnfgMgmtProbeFlowTmpl> existingTmpl = Database.query(
             'SELECT Id FROM CnfgMgmtProbeFlowTmpl WHERE CnfgMgmtDiscoveryProbeId = :probeId LIMIT 1',
             AccessLevel.SYSTEM_MODE);
-        if (existingTmpl.isEmpty()) {
-            CnfgMgmtProbeFlowTmpl tmpl = new CnfgMgmtProbeFlowTmpl();
-            tmpl.CnfgMgmtDiscoveryProbeId = probeId;
-            tmpl.FlowTemplateApiName      = templateApiName();
-            tmpl.CnfgItmDataScope         = 'Compute';
-            // DiscoveryMode was added in a later API version — set it only if the field
-            // exists at runtime, so this package still installs on older orgs.
-            Map<String, Schema.SObjectField> tmplFlds =
-                Schema.SObjectType.CnfgMgmtProbeFlowTmpl.fields.getMap();
-            if (tmplFlds.containsKey('discoverymode')) {
-                tmpl.put('DiscoveryMode', 'Pull');
-            }
-            Database.insert(tmpl, AccessLevel.SYSTEM_MODE);
-        }
+        if (!existingTmpl.isEmpty()) return;
 
+        CnfgMgmtProbeFlowTmpl tmpl = new CnfgMgmtProbeFlowTmpl();
+        tmpl.CnfgMgmtDiscoveryProbeId = probeId;
+        tmpl.FlowTemplateApiName      = templateApiName();
+        tmpl.CnfgItmDataScope         = 'Compute';
+        // DiscoveryMode was added in a later API version — set it only if the field
+        // exists at runtime, so this package still installs on older orgs.
+        Map<String, Schema.SObjectField> tmplFlds =
+            Schema.SObjectType.CnfgMgmtProbeFlowTmpl.fields.getMap();
+        if (tmplFlds.containsKey('discoverymode')) {
+            tmpl.put('DiscoveryMode', 'Pull');
+        }
+        Database.insert(tmpl, AccessLevel.SYSTEM_MODE);
+    }
+
+    private static void ensurePreviewAttrs(Id probeId) {
         Set<String> existingAttrs = new Set<String>();
         for (CnfgMgmtProbePrvwAttrDef a : Database.query(
             'SELECT CnfgItmAttrDevName FROM CnfgMgmtProbePrvwAttrDef WHERE CnfgMgmtDiscoveryProbeId = :probeId',
@@ -150,20 +167,5 @@ global without sharing class SampleProbeRegistrationQueueable implements Queueab
             attrs.add(a);
         }
         if (!attrs.isEmpty()) Database.insert(attrs, AccessLevel.SYSTEM_MODE);
-    }
-
-    private static void reconcileExistingRegistration() {
-        List<CnfgMgmtDiscoveryProbe> existing = Database.query(
-            'SELECT Id FROM CnfgMgmtDiscoveryProbe WHERE ExternalProbeType = :EXTERNAL_PROBE_TYPE LIMIT 1',
-            AccessLevel.SYSTEM_MODE);
-        if (existing.isEmpty()) {
-            insertProbeRegistration();
-            return;
-        }
-        CnfgMgmtDiscoveryProbe probe = new CnfgMgmtDiscoveryProbe(
-            Id                = existing[0].Id,
-            ExtlProbeCpntName = cpeDevName(),
-            ProbeIconPath     = iconDevName());
-        Database.update(probe, AccessLevel.SYSTEM_MODE);
     }
 }

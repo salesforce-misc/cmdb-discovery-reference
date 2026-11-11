@@ -23,6 +23,11 @@
                          actions. Where a vendor would compute a value, drop a
                          <formulaExpression> in instead.
           |
+        Store_Mapped_CI      holds the mapped CI in the ComputeCI variable
+          |
+        Check_Sync_Vulnerabilities  DECISION on the "Sync Vulnerabilities" template option
+          |   (off) -> Drop_Vulnerabilities: clears ComputeCI.Vulnerabilities
+          |
     [5] CMDB ACTION      Create_Sample_CI_Records
                          createIntegrationRecordsInCmdb: bulk-persist the CI graph to CMDB
 
@@ -85,7 +90,7 @@
         <name>Create_Sample_CI_Records</name>
         <label>Create Sample CI Records</label>
         <locationX>176</locationX>
-        <locationY>494</locationY>
+        <locationY>674</locationY>
         <actionName>createIntegrationRecordsInCmdb</actionName>
         <actionType>createIntegrationRecordsInCmdb</actionType>
         <dataTypeMappings>
@@ -96,7 +101,7 @@
         <inputParameters>
             <name>recordDetails</name>
             <value>
-                <elementReference>Map_Sample_Data_to_CI</elementReference>
+                <elementReference>ComputeCI</elementReference>
             </value>
         </inputParameters>
         <nameSegment>createIntegrationRecordsInCmdb</nameSegment>
@@ -104,6 +109,77 @@
     </actionCalls>
 
     <apiVersion>67.0</apiVersion>
+
+    <!-- Copy the transform's output into a variable so the decision below can adjust it. -->
+    <assignments>
+        <name>Store_Mapped_CI</name>
+        <label>Store Mapped CI</label>
+        <locationX>176</locationX>
+        <locationY>434</locationY>
+        <assignmentItems>
+            <assignToReference>ComputeCI</assignToReference>
+            <operator>Assign</operator>
+            <value>
+                <elementReference>Map_Sample_Data_to_CI</elementReference>
+            </value>
+        </assignmentItems>
+        <connector>
+            <targetReference>Check_Sync_Vulnerabilities</targetReference>
+        </connector>
+    </assignments>
+    <!-- "Sync Vulnerabilities" is off: send the computer without its vulnerability children. -->
+    <assignments>
+        <name>Drop_Vulnerabilities</name>
+        <label>Drop Vulnerabilities</label>
+        <locationX>308</locationX>
+        <locationY>554</locationY>
+        <assignmentItems>
+            <assignToReference>ComputeCI.Vulnerabilities</assignToReference>
+            <operator>Assign</operator>
+        </assignmentItems>
+        <connector>
+            <targetReference>Create_Sample_CI_Records</targetReference>
+        </connector>
+    </assignments>
+
+    <!-- The "Sync Vulnerabilities" option chosen on the template's Configure page (set by the
+         sampleSyncSettings CPE); substituted when the template is instantiated. -->
+    <constants>
+        <name>SyncVulnerabilitiesSetting</name>
+        <dataType>String</dataType>
+        <value>
+            <stringValue>${Variables.SyncVulnerabilities}</stringValue>
+        </value>
+    </constants>
+
+    <!-- Per-component toggle: keep the mapped vulnerabilities only when the admin enabled them.
+         Add one rule like this per optional child collection. -->
+    <decisions>
+        <name>Check_Sync_Vulnerabilities</name>
+        <label>Sync Vulnerabilities?</label>
+        <locationX>176</locationX>
+        <locationY>494</locationY>
+        <defaultConnector>
+            <targetReference>Drop_Vulnerabilities</targetReference>
+        </defaultConnector>
+        <defaultConnectorLabel>Off</defaultConnectorLabel>
+        <rules>
+            <name>Sync_Vulnerabilities_On</name>
+            <conditionLogic>and</conditionLogic>
+            <conditions>
+                <leftValueReference>SyncVulnerabilitiesSetting</leftValueReference>
+                <operator>EqualTo</operator>
+                <rightValue>
+                    <stringValue>true</stringValue>
+                </rightValue>
+            </conditions>
+            <connector>
+                <targetReference>Create_Sample_CI_Records</targetReference>
+            </connector>
+            <label>On</label>
+        </rules>
+    </decisions>
+
     <interviewLabel>${Variables.FlowLabelName} {!$Flow.CurrentDateTime}</interviewLabel>
     <label>Sync Data from Sample to Salesforce CMDB</label>
     <processType>AutoLaunchedFlow</processType>
@@ -167,7 +243,7 @@
         <locationY>374</locationY>
         <apexClass>sfcmdbSample__SampleComputeCI</apexClass>
         <connector>
-            <targetReference>Create_Sample_CI_Records</targetReference>
+            <targetReference>Store_Mapped_CI</targetReference>
         </connector>
         <dataType>Apex</dataType>
         <isCollection>false</isCollection>
@@ -282,4 +358,14 @@
             </transformValueActions>
         </transformValues>
     </transforms>
+
+    <!-- The CI graph handed to the CMDB action (transform output, minus any disabled children). -->
+    <variables>
+        <name>ComputeCI</name>
+        <apexClass>sfcmdbSample__SampleComputeCI</apexClass>
+        <dataType>Apex</dataType>
+        <isCollection>false</isCollection>
+        <isInput>false</isInput>
+        <isOutput>false</isOutput>
+    </variables>
 </Flow>
